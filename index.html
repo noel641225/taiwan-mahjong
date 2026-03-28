@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>台灣麻將 - Taiwan Mahjong</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+
+        html, body {
+            width:100%; height:100dvh; overflow:hidden;
+            font-family: 'Noto Serif TC','Microsoft YaHei','PingFang SC', sans-serif;
+            background: #0d1f0d;
+            color: #e0e0e0;
+            user-select: none;
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* ===== CSS Variables for Responsive Sizing ===== */
+        :root {
+            --tile-width: 42px;
+            --tile-height: 58px;
+            --d-tile-width: 36px;
+            --d-tile-height: 48px;
+            --player-tile-width: 56px;
+            --player-tile-height: 78px;
+        }
+
+        /* iPhone SE (375px) */
+        @media (max-width: 414px) {
+            :root {
+                --tile-width: 32px;
+                --tile-height: 44px;
+                --d-tile-width: 28px;
+                --d-tile-height: 38px;
+                --player-tile-width: 44px;
+                --player-tile-height: 62px;
+            }
+        }
+
+        /* iPad/Desktop (>768px) */
+        @media (min-width: 768px) {
+            :root {
+                --tile-width: 42px;
+                --tile-height: 58px;
+                --d-tile-width: 42px;
+                --d-tile-height: 56px;
+                --player-tile-width: 68px;
+                --player-tile-height: 94px;
+            }
+        }
+
+        /* ===== LAYOUT ===== */
+        .game-container {
+            width:100%; height:100dvh;
+            display:flex; flex-direction:column;
+        }
+
+        /* === Score Bar === */
+        .score-bar {
+            flex-shrink:0;
+            background: linear-gradient(180deg, #1a1a1a 0%, #111 100%);
+            padding: 8px 12px;
+            display:flex; justify-content:center; align-items:center;
+            gap:14px; font-size:12px;
+            border-bottom: 2px solid #3a5a3a;
+            flex-wrap:wrap;
+        }
+        .score-item { display:flex; align-items:center; gap:4px; }
+        .score-item .wind { color:#999; font-size:12px; }
+        .score-item .amount { font-weight:bold; color:#5fdf5f; min-width:45px; }
+        .score-item.south .amount { color:#ffd700; font-size:13px; font-weight:bold; }
+        .score-item.dealer .wind::before {
+            content:'莊'; background:#c8a000; color:#000; font-size:8px;
+            padding:1px 3px; border-radius:2px; margin-right:3px; font-weight:bold;
+        }
+        .info-bar { display:flex; gap:8px; font-size:10px; color:#666; }
+
+        /* === Game Table === */
+        .game-table {
+            flex:1; min-height:0;
+            display:grid;
+            grid-template-areas:
+                ".    north ."
+                "west center east"
+                ".    south .";
+            grid-template-columns: minmax(50px,70px) 1fr minmax(50px,70px);
+            grid-template-rows: auto 1fr minmax(140px, auto);
+            gap:3px; padding:3px;
+        }
+
+        /* === Opponents === */
+        .opp { background:rgba(255,255,255,0.04); border-radius:4px; padding:4px; overflow:hidden; }
+        .area-north { grid-area:north; }
+        .area-west  { grid-area:west; display:flex; flex-direction:column; align-items:center; }
+        .area-east  { grid-area:east; display:flex; flex-direction:column; align-items:center; }
+        .opp-label { font-size:10px; font-weight:bold; color:#888; text-align:center; margin-bottom:2px; }
+        .opp-label.is-dealer::after { content:' 莊'; color:#c8a000; }
+        .area-north .opp-tiles { display:flex; justify-content:center; gap:1px; flex-wrap:wrap; }
+        .area-west .opp-tiles, .area-east .opp-tiles {
+            display:flex; flex-direction:column; gap:1px; align-items:center; overflow:visible;
+        }
+        .opp-back {
+            width:20px; height:28px;
+            background: linear-gradient(145deg, #1a6e1a 0%, #0f4f0f 100%);
+            border:1px solid #0a3a0a; border-radius:2px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:7px; color:rgba(255,255,255,0.3); flex-shrink:0;
+        }
+
+        /* === Center (discards + info) === */
+        .center-area {
+            grid-area:center;
+            background: radial-gradient(ellipse at 40% 40%, #2a5a2a 0%, #1e4a1e 30%, #133013 70%, #0d1f0d 100%);
+            border-radius:8px;
+            border: 3px solid #4a7a4a;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.6), 0 0 12px rgba(0,0,0,0.5);
+            display:grid;
+            grid-template-areas:
+                "ci"
+                "cd";
+            grid-template-rows: auto 1fr;
+            gap:8px; padding:8px;
+            min-height:0; overflow:hidden;
+        }
+
+        /* === Single Central Discard Area === */
+        .discard-zone {
+            grid-area:cd;
+            display:flex; flex-wrap:wrap;
+            gap:2px; padding:4px;
+            overflow-y:auto; overflow-x:hidden;
+            justify-content:flex-start;
+            align-content:flex-start;
+            background:rgba(0,0,0,0.2);
+            border-radius:4px;
+        }
+
+        .center-info {
+            grid-area:ci;
+            display:flex; flex-direction:row; flex-wrap:wrap;
+            align-items:center; justify-content:center;
+            gap:8px; padding:4px 8px;
+        }
+        .wall-count { font-size:16px; font-weight:bold; color:#ffd700; }
+        .wall-label { font-size:9px; color:#777; }
+        .dice-row { display:flex; gap:4px; }
+        .dice {
+            width:28px; height:28px; background:linear-gradient(180deg, #f5f1e8 0%, #e8dfc8 100%);
+            border:2px solid #8b7355; border-radius:4px;
+            display:flex; align-items:center; justify-content:center;
+            font-weight:bold; font-size:14px; color:#333;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.5);
+        }
+        @keyframes roll { 0%,100%{transform:rotate(0)} 50%{transform:rotate(360deg)} }
+        .dice.rolling { animation:roll .1s infinite; }
+        .turn-info { font-size:11px; color:#aaa; text-align:center; font-weight:bold; white-space:nowrap; }
+
+        /* === Discard tiles (small) with player indicators === */
+        .d-tile {
+            width: var(--d-tile-width);
+            height: var(--d-tile-height);
+            background: linear-gradient(180deg, #f8f4e8 0%, #e8dfc8 100%);
+            border:1px solid #a08860;
+            border-radius:2px;
+            display:flex; align-items:center; justify-content:center;
+            flex-shrink:0; position:relative; overflow:hidden;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        /* Player indicator dots/borders */
+        .d-tile::after {
+            content:''; position:absolute;
+            width:3px; height:3px; border-radius:50%;
+            bottom:2px; right:2px; opacity:0.8;
+        }
+        .d-tile.south::after { background:#ffd700; } /* Gold for you */
+        .d-tile.east::after { background:#5a9aff; }   /* Blue */
+        .d-tile.north::after { background:#ff6b6b; }  /* Red */
+        .d-tile.west::after { background:#51cf66; }   /* Green */
+
+        .d-tile .dt-face { font-size:11px; font-weight:bold; line-height:1; text-align:center; }
+        .d-tile .dt-svg { width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+        .d-tile.man .dt-face { color:#c62828; }
+        .d-tile.pin .dt-face { color:#1565c0; }
+        .d-tile.sou .dt-face { color:#2e7d32; }
+        .d-tile.wind .dt-face { color:#333; font-size:13px; }
+        .d-tile.dragon .dt-face { font-size:14px; }
+        .d-tile.dragon.zhong .dt-face { color:#c62828; }
+        .d-tile.dragon.fa .dt-face { color:#2e7d32; }
+        .d-tile.dragon.bai .dt-face { color:#6a5acd; }
+        .d-tile .dt-pin { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:90%; height:90%; }
+        .dt-corner-num { position:absolute; top:-1px; left:1px; font-size:9px; font-weight:bold; z-index:1; line-height:1; text-shadow:0 0 2px rgba(255,255,255,0.9); }
+
+        /* === Player (South) === */
+        .player-area {
+            grid-area:south;
+            background:rgba(255,255,255,0.06);
+            border-radius:6px;
+            padding:4px 6px;
+            display:flex; flex-direction:column; gap:3px;
+        }
+        .player-status { display:flex; justify-content:center; align-items:center; gap:8px; min-height:14px; }
+        .listening-badge { font-size:11px; color:#5fdf5f; font-weight:bold; }
+        .player-melds { display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
+        .meld-group {
+            display:flex; gap:1px; border:1px solid rgba(255,255,255,0.12);
+            border-radius:3px; padding:1px; background:rgba(255,255,255,0.03);
+        }
+        /* Side player melds: stack vertically, rotate each tile to landscape */
+        .area-west .meld-group, .area-east .meld-group {
+            flex-direction: column !important;
+            gap: 0 !important;
+            align-items: center !important;
+            overflow: visible !important;
+        }
+        .area-west .meld-group .tile, .area-east .meld-group .tile {
+            /* Smaller tiles to fit in narrow 50-70px column */
+            width: 26px !important;
+            height: 36px !important;
+            font-size: 10px !important;
+            transform: rotate(90deg) !important;
+            /* After rotation: visual 36w×26h, layout box 26w×36h
+               Negative vertical margin reduces 36h to ~26h */
+            margin: -5px 0 !important;
+        }
+        .area-west .meld-group .tile .tile-face, .area-east .meld-group .tile .tile-face {
+            font-size: 9px !important;
+        }
+        .area-west .meld-group .tile .tile-num, .area-east .meld-group .tile .tile-num {
+            font-size: 11px !important;
+        }
+        .area-west .meld-group .tile .tile-suit, .area-east .meld-group .tile .tile-suit {
+            font-size: 5px !important;
+        }
+        .player-hand { display:flex; justify-content:center; flex-wrap:wrap; gap:3px; align-items:flex-end; }
+        /* === Player hand tiles: larger for readability === */
+        .player-area .tile {
+            width: var(--player-tile-width) !important;
+            height: var(--player-tile-height) !important;
+        }
+        .player-area .tile .tile-num { font-size: 28px !important; }
+        .player-area .tile .tile-suit { font-size: 12px !important; }
+        .player-area .tile .tile-char { font-size: 30px !important; }
+        .player-area .tile .tile-corner-num { font-size: 12px !important; }
+        .player-area .tile svg { width: 38px !important; height: 52px !important; }
+        /* Meld tiles in player area: slightly smaller than hand but still big */
+        .player-area .meld-group .tile {
+            width: calc(var(--player-tile-width) * 0.8) !important;
+            height: calc(var(--player-tile-height) * 0.8) !important;
+        }
+        .player-area .meld-group .tile .tile-num { font-size: 22px !important; }
+        .player-area .meld-group .tile .tile-suit { font-size: 10px !important; }
+        .player-area .meld-group .tile .tile-char { font-size: 24px !important; }
+        .player-area .meld-group .tile svg { width: 30px !important; height: 42px !important; }
+        .action-buttons {
+            display:flex; gap:5px; justify-content:center; flex-wrap:wrap;
+            min-height:44px; align-items:center;
+        }
+        .action-btn {
+            padding:6px 12px; font-size:13px; border:none; border-radius:4px;
+            cursor:pointer; font-weight:bold; color:white; transition:filter .15s;
+            min-height:44px; min-width:44px;
+        }
+        .action-btn:hover { filter:brightness(1.15); }
+        .action-btn.hu   { background:#27ae60; }
+        .action-btn.hu_self { background:#e67e22; }
+        .action-btn.pass_self { background:#555; }
+        .action-btn.pong { background:#2980b9; }
+        .action-btn.kong { background:#8e44ad; }
+        .action-btn.chi  { background:#d35400; }
+        .action-btn.pass { background:#555; }
+
+        /* ============================================ */
+        /*   TILE DESIGN — Professional Mahjong Style  */
+        /* ============================================ */
+        .tile {
+            width: var(--tile-width);
+            height: var(--tile-height);
+            background: linear-gradient(135deg, #fffef9 0%, #fefcf5 20%, #f8f0d8 60%, #e8ddc0 100%);
+            border:1px solid #b8a878;
+            border-top:2px solid #e8e0c8;
+            border-bottom:2px solid #806840;
+            border-radius:5px;
+            display:flex; align-items:center; justify-content:center;
+            cursor:pointer;
+            transition: transform .12s, box-shadow .12s;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.2);
+            position:relative; flex-shrink:0; overflow:hidden;
+        }
+        .tile:hover {
+            transform:translateY(-5px);
+            box-shadow: 0 8px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.8);
+            z-index:2;
+        }
+        .tile.selected {
+            transform:translateY(-8px);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.6), 0 0 0 2.5px #ffd700, inset 0 1px 0 rgba(255,255,255,0.8);
+            z-index:3;
+        }
+        /* Tile face container */
+        .tile-face {
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            width:100%; height:100%; padding:2px;
+        }
+
+        /* === 萬子 (Characters) - Red === */
+        .tile.man .tile-num { color:#c62828; font-size:18px; font-weight:bold; line-height:1; }
+        .tile.man .tile-suit { color:#c62828; font-size:8px; font-weight:bold; }
+
+        /* === 筒子 (Pin/Circles) - SVG rendered === */
+        /* SVGs rendered inline */
+
+        /* === 條子 (Bamboo) - SVG rendered === */
+        /* SVGs rendered inline with bamboo stick graphics */
+
+        /* === 風牌 (Wind) - Black === */
+        .tile.wind .tile-char { color:#333; font-size:20px; font-weight:bold; }
+
+        /* === 龍牌 (Dragon) === */
+        .tile.dragon .tile-char { font-size:20px; font-weight:bold; }
+        .tile.dragon.zhong .tile-char { color:#c62828; } /* Red */
+        .tile.dragon.fa .tile-char { color:#2e7d32; }    /* Green */
+        .tile.dragon.bai .tile-char { display:none; }    /* Hidden, SVG shown instead */
+        .tile.dragon.bai .tile-face { padding:4px; }
+
+        /* === Number indicators on pin/sou tiles === */
+        .tile-corner-num {
+            position:absolute; top:1px; left:2px; z-index:1;
+            font-weight:bold; line-height:1;
+            font-family:'Noto Serif TC', serif;
+            text-shadow: 0 0 2px rgba(255,255,255,0.8);
+        }
+        .sou-num { color:#2e7d32; }
+        .pin-num { color:#1565c0; }
+
+        /* Meld tiles (slightly smaller) */
+        .meld-group .tile { width:calc(var(--tile-width)*0.85); height:calc(var(--tile-height)*0.85); }
+
+        /* ===== RESPONSIVE ADJUSTMENTS ===== */
+        @media (max-width: 414px) {
+            .score-bar { padding:6px 8px; gap:10px; font-size:11px; }
+            .tile.man .tile-num { font-size:14px; }
+            .tile.man .tile-suit { font-size:7px; }
+            .tile.wind .tile-char { font-size:16px; }
+            .tile.dragon .tile-char { font-size:16px; }
+            .action-buttons { gap:4px; }
+            .action-btn { padding:5px 10px; font-size:12px; }
+            .center-info { gap:6px; }
+            .dice { width:24px; height:24px; font-size:12px; }
+            .turn-info { font-size:10px; }
+            .player-area .tile .tile-num { font-size:22px !important; }
+            .player-area .tile .tile-suit { font-size:10px !important; }
+            .player-area .tile .tile-char { font-size:24px !important; }
+            .player-area .tile svg { width: 30px !important; height: 42px !important; }
+        }
+
+        @media (min-width: 768px) {
+            .tile.man .tile-num { font-size:20px; }
+            .tile.man .tile-suit { font-size:9px; }
+            .tile.wind .tile-char { font-size:24px; }
+            .tile.dragon .tile-char { font-size:24px; }
+            .player-area .tile .tile-num { font-size:32px !important; }
+            .player-area .tile .tile-suit { font-size:14px !important; }
+            .player-area .tile .tile-char { font-size:36px !important; }
+            .player-area .tile .tile-corner-num { font-size:14px !important; }
+            .player-area .tile svg { width: 46px !important; height: 62px !important; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <!-- Score Bar -->
+    <div class="score-bar">
+        <div class="score-item dealer south">
+            <span class="wind">南(你)</span>
+            <span class="amount" id="southScore">0</span>
+        </div>
+        <div class="score-item">
+            <span class="wind">東</span>
+            <span class="amount" id="eastScore">0</span>
+        </div>
+        <div class="score-item">
+            <span class="wind">北</span>
+            <span class="amount" id="northScore">0</span>
+        </div>
+        <div class="score-item">
+            <span class="wind">西</span>
+            <span class="amount" id="westScore">0</span>
+        </div>
+        <div class="info-bar">
+            <span id="roundInfo">第 1 圈</span>
+            <span id="actionInfo"></span>
+        </div>
+    </div>
+
+    <!-- Game Table -->
+    <div class="game-table">
+        <!-- North Player -->
+        <div class="area-north opp">
+            <div class="opp-label" id="northLabel">北</div>
+            <div class="opp-tiles" id="northTiles"></div>
+        </div>
+
+        <!-- West Player -->
+        <div class="area-west opp">
+            <div class="opp-label" id="westLabel">西</div>
+            <div class="opp-tiles" id="westTiles"></div>
+        </div>
+
+        <!-- Center Area: Discard Pool + Wall Info -->
+        <div class="center-area">
+            <div class="center-info">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                    <div class="wall-count" id="wallCount">108</div>
+                    <div class="wall-label">剩餘</div>
+                </div>
+                <div class="dice-row" id="diceRow"></div>
+                <div class="turn-info" id="turnInfo"></div>
+                <span id="countdown" style="color:#ffd700;font-weight:bold;margin-left:8px;font-size:14px"></span>
+            </div>
+            <div class="discard-zone" id="discardPool"></div>
+        </div>
+
+        <!-- East Player -->
+        <div class="area-east opp">
+            <div class="opp-label" id="eastLabel">東</div>
+            <div class="opp-tiles" id="eastTiles"></div>
+        </div>
+
+        <!-- South Player (You) -->
+        <div class="player-area">
+            <div class="player-status">
+                <span class="listening-badge" id="listeningIndicator"></span>
+            </div>
+            <div class="player-melds" id="southMelds"></div>
+            <div class="player-hand" id="southHand"></div>
+            <div class="action-buttons" id="actionButtons"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ========================================
+// GAME STATE & CONSTANTS
+// ========================================
+const POSITIONS = ['North','East','South','West'];
+const POSITION_NAMES = {North:'北',East:'東',South:'南',West:'西'};
+const CHINESE_NUM = {1:'一',2:'二',3:'三',4:'四',5:'五',6:'六',7:'七',8:'八',9:'九'};
+const TILES = [];
+for(let i=1;i<=9;i++){
+    for(let j=0;j<4;j++){
+        TILES.push({type:'man',value:i});
+        TILES.push({type:'pin',value:i});
+        TILES.push({type:'sou',value:i});
+    }
+}
+const WINDS=['東','南','西','北'];
+const DRAGONS=['中','發','白'];
+for(let j=0;j<4;j++){
+    WINDS.forEach(w=>TILES.push({type:'wind',value:w}));
+    DRAGONS.forEach(d=>TILES.push({type:'dragon',value:d}));
+}
+
+const gameState = {
+    wall: [],
+    players: {},
+    currentTurn: 'East',
+    roundNumber: 1,
+    discardCount: 0,
+    selectedTile: null,
+    lastDiscard: null,
+    diceRoll: null,
+    allDiscards: [],
+    isProcessing: false,
+    drawnTileIndex: -1,  // Track drawn tile position for South
+};
+POSITIONS.forEach(pos=>{ gameState.players[pos]={hand:[],melds:[],discards:[],score:2000}; });
+
+// ========================================
+// SVG TILE RENDERING FUNCTIONS
+// ========================================
+function pinSVG(n, w, h) {
+    const v = parseInt(n);
+    const layouts = {
+        1: [[50,50]],
+        2: [[50,30],[50,70]],
+        3: [[50,22],[28,65],[72,65]],
+        4: [[30,30],[70,30],[30,70],[70,70]],
+        5: [[30,25],[70,25],[50,50],[30,75],[70,75]],
+        6: [[30,22],[70,22],[30,50],[70,50],[30,78],[70,78]],
+        7: [[25,18],[50,18],[75,18],[30,52],[70,52],[30,80],[70,80]],
+        8: [[30,18],[70,18],[30,40],[70,40],[30,62],[70,62],[30,84],[70,84]],
+        9: [[26,20],[50,20],[74,20],[26,50],[50,50],[74,50],[26,80],[50,80],[74,80]]
+    };
+    const pts = layouts[v] || [];
+    const r = v <= 4 ? 14 : (v <= 6 ? 12 : 10);
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 100 100">`;
+    pts.forEach(([x,y]) => {
+        svg += `<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#1565c0" stroke-width="3"/>`;
+        svg += `<circle cx="${x}" cy="${y}" r="${r*0.5}" fill="#1565c0"/>`;
+    });
+    svg += '</svg>';
+    return svg;
+}
+
+function bambooSVG(n, w, h) {
+    const v = parseInt(n);
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 100 100">`;
+
+    // Draw a single bamboo stick: thin, segmented, with proper nodes
+    // cx = center x, y = top y, sH = stick height, color = 'green'|'red'|'blue'
+    const drawStick = (cx, y, sH, color = 'green') => {
+        const sW = 7; // stick width (thin!)
+        const x = cx - sW/2;
+        const colors = {
+            green:  { fill:'#3a8a3a', dark:'#2a6a2a', stroke:'#1a5a1a', hi:'rgba(255,255,255,0.35)' },
+            red:    { fill:'#d04040', dark:'#a03030', stroke:'#802020', hi:'rgba(255,255,255,0.3)' },
+            blue:   { fill:'#3a7aaa', dark:'#2a5a8a', stroke:'#1a4a6a', hi:'rgba(255,255,255,0.3)' }
+        };
+        const c = colors[color] || colors.green;
+        // Main body with rounded ends
+        svg += `<rect x="${x}" y="${y}" width="${sW}" height="${sH}" rx="${sW/2}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="0.8"/>`;
+        // Segment nodes (2 nodes for each stick)
+        const n1 = y + sH * 0.33;
+        const n2 = y + sH * 0.66;
+        svg += `<ellipse cx="${cx}" cy="${n1}" rx="${sW/2+1.5}" ry="2" fill="${c.dark}" opacity="0.7"/>`;
+        svg += `<ellipse cx="${cx}" cy="${n2}" rx="${sW/2+1.5}" ry="2" fill="${c.dark}" opacity="0.7"/>`;
+        // Highlight
+        svg += `<line x1="${cx-1}" y1="${y+3}" x2="${cx-1}" y2="${y+sH-3}" stroke="${c.hi}" stroke-width="1.2" stroke-linecap="round"/>`;
+    };
+
+    if (v === 1) {
+        // 一條: Bird (stylized sparrow/peacock) - traditional mahjong design
+        // Body - main oval
+        svg += `<ellipse cx="50" cy="52" rx="16" ry="20" fill="#2d8a4e"/>`;
+        // Head
+        svg += `<circle cx="50" cy="24" r="10" fill="#2d8a4e"/>`;
+        // Eye
+        svg += `<circle cx="53" cy="22" r="2.5" fill="white"/>`;
+        svg += `<circle cx="54" cy="22" r="1.2" fill="#222"/>`;
+        // Beak
+        svg += `<polygon points="60,24 70,22 60,27" fill="#cc8800"/>`;
+        // Crest on head
+        svg += `<path d="M 46 16 Q 50 6 54 16" stroke="#d04040" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+        // Wing detail
+        svg += `<path d="M 38 45 Q 50 38 62 45" stroke="#1a6a3a" stroke-width="2.5" fill="none"/>`;
+        svg += `<path d="M 40 50 Q 50 43 60 50" stroke="#1a6a3a" stroke-width="2" fill="none"/>`;
+        // Tail feathers
+        svg += `<path d="M 42 65 Q 35 75 28 85" stroke="#2d8a4e" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+        svg += `<path d="M 50 68 Q 50 78 50 88" stroke="#2d8a4e" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+        svg += `<path d="M 58 65 Q 65 75 72 85" stroke="#2d8a4e" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+        // Feet
+        svg += `<line x1="44" y1="70" x2="40" y2="78" stroke="#cc8800" stroke-width="1.5"/>`;
+        svg += `<line x1="56" y1="70" x2="60" y2="78" stroke="#cc8800" stroke-width="1.5"/>`;
+    // UNIFORM stick height: all sticks are the same short length (24px)
+    // Differentiation is ONLY by count and arrangement
+    } else if (v === 2) {
+        // 二條: 1 column × 2 rows, centered
+        drawStick(50, 12, 24);
+        drawStick(50, 62, 24);
+    } else if (v === 3) {
+        // 三條: 1 top center + 2 bottom (triangle, like 3-pin)
+        drawStick(50, 8, 28);
+        drawStick(35, 62, 28);
+        drawStick(65, 62, 28);
+    } else if (v === 4) {
+        // 四條: 2 columns × 2 rows
+        drawStick(35, 14, 24);
+        drawStick(65, 14, 24);
+        drawStick(35, 62, 24);
+        drawStick(65, 62, 24);
+    } else if (v === 5) {
+        // 五條: 2+1(red)+2 quincunx
+        drawStick(35, 5, 24);
+        drawStick(65, 5, 24);
+        drawStick(50, 38, 24, 'red');
+        drawStick(35, 72, 24);
+        drawStick(65, 72, 24);
+    } else if (v === 6) {
+        // 六條: 2 columns × 3 rows
+        drawStick(35, 5, 24);
+        drawStick(65, 5, 24);
+        drawStick(35, 38, 24);
+        drawStick(65, 38, 24);
+        drawStick(35, 72, 24);
+        drawStick(65, 72, 24);
+    } else if (v === 7) {
+        // 七條: 3 top + 1 red center + 3 bottom
+        drawStick(25, 5, 24);
+        drawStick(50, 5, 24);
+        drawStick(75, 5, 24);
+        drawStick(50, 38, 24, 'red');
+        drawStick(25, 72, 24);
+        drawStick(50, 72, 24);
+        drawStick(75, 72, 24);
+    } else if (v === 8) {
+        // 八條: 2 columns × 4 rows
+        drawStick(35, 2, 18);
+        drawStick(65, 2, 18);
+        drawStick(35, 27, 18);
+        drawStick(65, 27, 18);
+        drawStick(35, 54, 18);
+        drawStick(65, 54, 18);
+        drawStick(35, 79, 18);
+        drawStick(65, 79, 18);
+    } else if (v === 9) {
+        // 九條: 3 columns × 3 rows, center column red
+        drawStick(25, 5, 24);
+        drawStick(50, 5, 24, 'red');
+        drawStick(75, 5, 24);
+        drawStick(25, 38, 24);
+        drawStick(50, 38, 24, 'red');
+        drawStick(75, 38, 24);
+        drawStick(25, 72, 24);
+        drawStick(50, 72, 24, 'red');
+        drawStick(75, 72, 24);
+    }
+
+    svg += '</svg>';
+    return svg;
+}
+
+function baiSVG(w, h) {
+    // White dragon: empty frame
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 100 100">`;
+    svg += `<rect x="15" y="10" width="70" height="80" rx="5" fill="none" stroke="#4a5acd" stroke-width="4"/>`;
+    svg += `<rect x="25" y="20" width="50" height="60" rx="3" fill="none" stroke="#4a5acd" stroke-width="2"/>`;
+    svg += '</svg>';
+    return svg;
+}
+
+// ========================================
+// TILE RENDERING — build tile HTML
+// ========================================
+function buildTileFace(tile, size) {
+    // size: 'normal', 'meld', 'discard', 'win'
+    const isDiscard = size === 'discard';
+    const isWin = size === 'win';
+    const isMeld = size === 'meld';
+
+    if (isDiscard) {
+        // Discard tile: SVG graphic + corner number
+        const dw = 26, dh = 34;
+        if (tile.type === 'man') {
+            const num = CHINESE_NUM[parseInt(tile.value)] || tile.value;
+            return `<span class="dt-face" style="color:#c62828;font-size:12px;line-height:1"><span style="font-size:15px">${num}</span><br><span style="font-size:7px">萬</span></span>`;
+        }
+        if (tile.type === 'pin') {
+            return `<span class="dt-svg" style="position:relative"><span class="dt-corner-num" style="color:#1565c0">${tile.value}</span>${pinSVG(tile.value, dw, dh)}</span>`;
+        }
+        if (tile.type === 'sou') {
+            return `<span class="dt-svg" style="position:relative"><span class="dt-corner-num" style="color:#2e7d32">${tile.value}</span>${bambooSVG(tile.value, dw, dh)}</span>`;
+        }
+        if (tile.type === 'dragon' && tile.value === '白') {
+            return `<span class="dt-svg">${baiSVG(20, 26)}</span>`;
+        }
+        return `<span class="dt-face">${tile.value}</span>`;
+    }
+
+    if (isWin) {
+        return getTileDisplay(tile);
+    }
+
+    // Normal / Meld tile
+    if (tile.type === 'man') {
+        const num = CHINESE_NUM[parseInt(tile.value)] || tile.value;
+        return `<div class="tile-face"><span class="tile-num">${num}</span><span class="tile-suit">萬</span></div>`;
+    }
+    if (tile.type === 'sou') {
+        // BUG FIX 1: Use bambooSVG + number indicator for clarity
+        const w = isMeld ? 22 : 28;
+        const h = isMeld ? 30 : 38;
+        const numSz = isMeld ? '8px' : '10px';
+        return `<div class="tile-face"><span class="tile-corner-num sou-num" style="font-size:${numSz}">${tile.value}</span>${bambooSVG(tile.value, w, h)}</div>`;
+    }
+    if (tile.type === 'pin') {
+        const w = isMeld ? 20 : 28;
+        const h = isMeld ? 28 : 38;
+        const numSz = isMeld ? '8px' : '10px';
+        return `<div class="tile-face"><span class="tile-corner-num pin-num" style="font-size:${numSz}">${tile.value}</span>${pinSVG(tile.value, w, h)}</div>`;
+    }
+    if (tile.type === 'wind') {
+        return `<div class="tile-face"><span class="tile-char">${tile.value}</span></div>`;
+    }
+    if (tile.type === 'dragon') {
+        if (tile.value === '白') {
+            const w = 26, h = 36;
+            return `<div class="tile-face">${baiSVG(w, h)}</div>`;
+        }
+        return `<div class="tile-face"><span class="tile-char">${tile.value}</span></div>`;
+    }
+    return '';
+}
+
+function createPlayerTileEl(tile, idx) {
+    const el = document.createElement('div');
+    el.className = `tile ${tile.type}`;
+    if (tile.type === 'dragon') {
+        if (tile.value === '中') el.classList.add('zhong');
+        else if (tile.value === '發') el.classList.add('fa');
+        else if (tile.value === '白') el.classList.add('bai');
+    }
+    el.innerHTML = buildTileFace(tile, 'normal');
+    el.addEventListener('click', () => handleTileClick(idx));
+    el.addEventListener('dblclick', () => handleTileDiscard(idx));
+    return el;
+}
+
+function createDiscardTileEl(tile, player) {
+    const el = document.createElement('div');
+    el.className = `d-tile ${tile.type} ${player || ''}`;
+    if (tile.type === 'dragon') {
+        if (tile.value === '中') el.classList.add('zhong');
+        else if (tile.value === '發') el.classList.add('fa');
+        else if (tile.value === '白') el.classList.add('bai');
+    }
+    el.innerHTML = buildTileFace(tile, 'discard');
+    return el;
+}
+
+// ========================================
+// TILE CREATION & SHUFFLE
+// ========================================
+function createWall() {
+    gameState.wall = TILES.map(t=>({...t}));
+    for(let i=gameState.wall.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [gameState.wall[i],gameState.wall[j]]=[gameState.wall[j],gameState.wall[i]];
+    }
+}
+
+function dealTiles() {
+    gameState.players.East.hand = gameState.wall.splice(0,13);
+    for(const p of ['South','West','North']) gameState.players[p].hand = gameState.wall.splice(0,13);
+    // Sort South's initial hand
+    sortHand(gameState.players['South'].hand);
+    gameState.drawnTileIndex = -1;
+}
+
+function drawTile(pos) {
+    // DEFENSIVE: Check wall not empty
+    if(gameState.wall.length===0) {
+        return false;
+    }
+    // Sort BEFORE drawing so the new tile stays at the right end
+    if(pos === 'South') {
+        sortHand(gameState.players[pos].hand);
+    }
+    const t = gameState.wall.pop();
+    gameState.players[pos].hand.push(t);
+    gameState.discardCount++;
+    // Track drawn tile index for South player display
+    if(pos === 'South') {
+        gameState.drawnTileIndex = gameState.players[pos].hand.length - 1;
+    }
+    return true;
+}
+
+// ========================================
+// LISTENING & WIN DETECTION
+// ========================================
+function isListening(hand, melds) {
+    if(hand.length%3!==2) return false;
+    const tSet = new Set();
+    hand.forEach(t=>tSet.add(JSON.stringify(t)));
+    for(const t of tSet) {
+        const tile = JSON.parse(t);
+        if(canWin(hand, melds, tile)) return true;
+    }
+    return false;
+}
+
+function findKong(hand, tile) {
+    const cnt = hand.filter(t=>t.type===tile.type&&t.value===tile.value).length;
+    return cnt===3?[tile]:[];
+}
+
+function findPong(hand, tile) {
+    // BUG FIX 2a: Return boolean, not 0/1
+    return hand.filter(t=>t.type===tile.type&&t.value===tile.value).length>=2;
+}
+
+function findChi(hand, tile) {
+    // Chi only works with numbered suits (man/pin/sou)
+    if(tile.type==='wind' || tile.type==='dragon') return [];
+    const v = parseInt(tile.value);
+    if(isNaN(v)) return [];
+    const results = [];
+    const hasInHand = (type, val) => hand.some(t => t.type === type && parseInt(t.value) === val);
+
+    // Case 1: tile is the LOWEST in sequence: [tile, tile+1, tile+2]
+    if(v <= 7 && hasInHand(tile.type, v+1) && hasInHand(tile.type, v+2)) {
+        results.push({type:'chi', tiles:[
+            tile,
+            {type:tile.type, value:String(v+1)},
+            {type:tile.type, value:String(v+2)}
+        ]});
+    }
+    // Case 2: tile is the MIDDLE: [tile-1, tile, tile+1]
+    if(v >= 2 && v <= 8 && hasInHand(tile.type, v-1) && hasInHand(tile.type, v+1)) {
+        results.push({type:'chi', tiles:[
+            {type:tile.type, value:String(v-1)},
+            tile,
+            {type:tile.type, value:String(v+1)}
+        ]});
+    }
+    // Case 3: tile is the HIGHEST: [tile-2, tile-1, tile]
+    if(v >= 3 && hasInHand(tile.type, v-2) && hasInHand(tile.type, v-1)) {
+        results.push({type:'chi', tiles:[
+            {type:tile.type, value:String(v-2)},
+            {type:tile.type, value:String(v-1)},
+            tile
+        ]});
+    }
+    return results;
+}
+
+function testWin(hand) {
+    const testHand = hand.map(t=>({...t}));
+    // Sort so pong/chi detection on consecutive indices works
+    sortHand(testHand);
+
+    function tryWin(h) {
+        if(h.length===0) return true;
+        if(h.length===2&&h[0].type===h[1].type&&String(h[0].value)===String(h[1].value)) return true;
+
+        // Try pong
+        for(let i=0;i<h.length-2;i++) {
+            if(h[i].type===h[i+1].type&&h[i].type===h[i+2].type&&
+               String(h[i].value)===String(h[i+1].value)&&String(h[i].value)===String(h[i+2].value)) {
+                const nh = h.slice(0,i).concat(h.slice(i+3));
+                if(tryWin(nh)) return true;
+            }
+        }
+
+        // Try chi
+        for(let i=0;i<h.length-2;i++) {
+            for(let j=i+1;j<h.length-1;j++) {
+                for(let k=j+1;k<h.length;k++) {
+                    const [a,b,c]=[h[i],h[j],h[k]];
+                    if(a.type===b.type&&b.type===c.type) {
+                        const vals=[parseInt(a.value),parseInt(b.value),parseInt(c.value)].sort((x,y)=>x-y);
+                        if(vals[1]-vals[0]===1&&vals[2]-vals[1]===1) {
+                            const nh = h.filter((t,idx)=>![i,j,k].includes(idx));
+                            if(tryWin(nh)) return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    return tryWin(testHand);
+}
+
+function canWin(hand, melds, tile) {
+    const testHand = [...hand, tile];
+    return testWin(testHand);
+}
+
+// ========================================
+// HAND SORTING
+// ========================================
+function sortHand(hand) {
+    const typeOrder = {man:0, pin:1, sou:2, wind:3, dragon:4};
+    const windOrder = {'東':0, '南':1, '西':2, '北':3};
+    const dragonOrder = {'中':0, '發':1, '白':2};
+    hand.sort((a,b)=>{
+        if(typeOrder[a.type]!==typeOrder[b.type]) return typeOrder[a.type]-typeOrder[b.type];
+        if(a.type==='wind') return (windOrder[a.value]||0)-(windOrder[b.value]||0);
+        if(a.type==='dragon') return (dragonOrder[a.value]||0)-(dragonOrder[b.value]||0);
+        return parseInt(a.value)-parseInt(b.value);
+    });
+}
+
+// ========================================
+// DISPLAY & UPDATES
+// ========================================
+function updateDisplay() {
+    updatePlayerDisplay();
+    updateOpponentDisplay();
+    updateDiscards();
+    updateScoreBar();
+    checkListening();
+    updateTurnInfo();
+}
+
+function updatePlayerDisplay() {
+    const player = gameState.players['South'];
+    // NOTE: Do NOT sort here — sorting happens in drawTile (before draw) and after discard
+
+    // Melds
+    const meldsEl = document.getElementById('southMelds');
+    meldsEl.innerHTML = '';
+    for(const m of player.melds) {
+        const mg = document.createElement('div');
+        mg.className = 'meld-group';
+        for(const t of m.tiles) {
+            const te = document.createElement('div');
+            te.className = `tile ${t.type}`;
+            if(t.type==='dragon') {
+                if(t.value==='中')te.classList.add('zhong');
+                else if(t.value==='發')te.classList.add('fa');
+                else if(t.value==='白')te.classList.add('bai');
+            }
+            te.innerHTML = buildTileFace(t,'meld');
+            mg.appendChild(te);
+        }
+        meldsEl.appendChild(mg);
+    }
+
+    // Hand
+    updatePlayerHandOnly();
+}
+
+function updateOpponentDisplay() {
+    for(const pos of ['North','East','West']) {
+        const opp = gameState.players[pos];
+        const el = document.getElementById(pos.toLowerCase()+'Tiles');
+        el.innerHTML = '';
+        for(let i=0;i<opp.hand.length;i++) {
+            const back = document.createElement('div');
+            back.className = 'opp-back';
+            back.textContent = i+1;
+            el.appendChild(back);
+        }
+        for(const m of opp.melds) {
+            const mg = document.createElement('div');
+            mg.className = 'meld-group';
+            for(const t of m.tiles) {
+                const te = document.createElement('div');
+                te.className = `tile ${t.type}`;
+                if(t.type==='dragon') {
+                    if(t.value==='中')te.classList.add('zhong');
+                    else if(t.value==='發')te.classList.add('fa');
+                    else if(t.value==='白')te.classList.add('bai');
+                }
+                te.innerHTML = buildTileFace(t,'meld');
+                // Issue 1 Fix: Apply inline rotation for East/West players
+                if(pos === 'East' || pos === 'West') {
+                    te.style.width = '26px';
+                    te.style.height = '36px';
+                    te.style.transform = 'rotate(90deg)';
+                    te.style.margin = '-5px 0';
+                    te.style.fontSize = '10px';
+                }
+                mg.appendChild(te);
+            }
+            mg.style.marginTop='2px';
+            el.appendChild(mg);
+        }
+    }
+}
+
+function updateDiscards() {
+    const container = document.getElementById('discardPool');
+    container.innerHTML = '';
+
+    // Render from chronological global array
+    for(let i = 0; i < gameState.allDiscards.length; i++) {
+        const {tile, player} = gameState.allDiscards[i];
+        const el = createDiscardTileEl(tile, player.toLowerCase());
+        // Make the most recent discard slightly more prominent
+        if(i === gameState.allDiscards.length - 1) {
+            el.style.transform = 'scale(1.05)';
+        }
+        container.appendChild(el);
+    }
+}
+
+function updateScoreBar() {
+    for(const pos of POSITIONS) {
+        const scoreEl = document.getElementById(pos.toLowerCase()+'Score');
+        const score = gameState.players[pos].score;
+        scoreEl.textContent = `$${score}`;
+        scoreEl.style.color = score <= 500 ? '#ff4444' : (pos === 'South' ? '#ffd700' : '#5fdf5f');
+    }
+    document.getElementById('wallCount').textContent = gameState.wall.length;
+    document.getElementById('roundInfo').textContent = `第 ${gameState.roundNumber} 圈`;
+}
+
+function updateActionInfo(text) { document.getElementById('actionInfo').textContent = text; }
+
+function updateTurnInfo() {
+    const turnName = POSITION_NAMES[gameState.currentTurn] || gameState.currentTurn;
+    document.getElementById('turnInfo').textContent = `${turnName}出牌`;
+}
+
+function checkListening() {
+    const hand = gameState.players['South'].hand, melds = gameState.players['South'].melds;
+    document.getElementById('listeningIndicator').textContent = isListening(hand,melds) ? '🎯 聽牌中' : '';
+}
+
+// Issue 3 Fix: Countdown timer for player discard
+let countdownInterval = null;
+let countdownSeconds = 0;
+
+function startCountdown() {
+    clearCountdown();
+    countdownSeconds = 15;
+    updateCountdownDisplay();
+    countdownInterval = setInterval(() => {
+        countdownSeconds--;
+        updateCountdownDisplay();
+        if(countdownSeconds <= 0) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            // Flash warning - do NOT auto-discard
+            flashWarning();
+        }
+    }, 1000);
+}
+
+function clearCountdown() {
+    if(countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+    countdownSeconds = 0;
+    const el = document.getElementById('countdown');
+    if(el) el.textContent = '';
+}
+
+function updateCountdownDisplay() {
+    const el = document.getElementById('countdown');
+    if(!el) return;
+    if(countdownSeconds > 0) {
+        el.textContent = `⏱ ${countdownSeconds}s`;
+        el.style.color = countdownSeconds <= 5 ? '#ff4444' : '#ffd700';
+    } else {
+        el.textContent = '';
+    }
+}
+
+function flashWarning() {
+    const el = document.getElementById('countdown');
+    if(!el) return;
+    let flashes = 0;
+    const flashInterval = setInterval(() => {
+        el.textContent = flashes % 2 === 0 ? '⚠ 請出牌！' : '';
+        el.style.color = '#ff4444';
+        flashes++;
+        if(flashes > 10) {
+            clearInterval(flashInterval);
+            el.textContent = '⚠ 請出牌！';
+        }
+    }, 500);
+}
+
+// ========================================
+// PLAYER INTERACTION
+// ========================================
+function handleTileClick(idx) {
+    if(gameState.currentTurn!=='South') return;
+    if(gameState.players['South'].hand.length%3!==2) return;
+    if(gameState.selectedTile===idx) handleTileDiscard(idx);
+    else { gameState.selectedTile=idx; updatePlayerHandOnly(); }
+}
+
+function handleTileDiscard(idx) {
+    if(gameState.currentTurn!=='South') return;
+    if(gameState.isProcessing) return;
+    clearCountdown();
+    const hand = gameState.players['South'].hand;
+    if(hand.length%3!==2) return;
+    const tile = hand.splice(idx,1)[0];
+    gameState.selectedTile = null;
+    gameState.drawnTileIndex = -1;  // Clear drawn tile marker
+    // Sort hand after discard for clean display
+    sortHand(hand);
+    gameState.players['South'].discards.push(tile);
+    gameState.allDiscards.push({tile, player:'South', order: gameState.allDiscards.length});
+    gameState.lastDiscard = {position:'South',tile};
+    updateDisplay();
+    handleOtherPlayerActions();
+}
+
+function updatePlayerHandOnly() {
+    const el = document.getElementById('southHand');
+    el.innerHTML = '';
+    const drawnIdx = gameState.drawnTileIndex;
+    gameState.players['South'].hand.forEach((tile,idx)=>{
+        const te = createPlayerTileEl(tile,idx);
+        // Add visual gap before drawn tile to make it stand out
+        if(idx === drawnIdx && drawnIdx > 0) {
+            te.style.marginLeft = '16px';
+            te.style.borderColor = '#ffd700';
+            te.style.boxShadow = '0 3px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.8), 0 0 6px rgba(255,215,0,0.4)';
+        }
+        if(idx===gameState.selectedTile) te.classList.add('selected');
+        el.appendChild(te);
+    });
+}
+
+// ========================================
+// ACTION CHECKING
+// ========================================
+function nextPos(from) {
+    // Standard Taiwan mahjong turn order (counter-clockwise): East→South→West→North
+    const o = ['East','South','West','North'];
+    const i = o.indexOf(from);
+    return [1,2,3].map(x=>o[(i+x)%4]);
+}
+function nextPlayer(pos) {
+    // Returns the NEXT player in turn order (下家)
+    // Turn order: East→South→West→North→East (counter-clockwise)
+    // Chi can only be done by the next player after the discarder
+    // South's 上家 is East, so South can chi from East
+    const o = ['East','South','West','North'];
+    return o[(o.indexOf(pos)+1)%4];
+}
+
+function checkActions(fromPos) {
+    const actions = [], tile = gameState.lastDiscard.tile;
+    for(const pos of nextPos(fromPos)){
+        const hand = gameState.players[pos].hand, melds = gameState.players[pos].melds;
+        if(canWin(hand,melds,tile)) actions.push({type:'hu',position:pos,hand:[...hand],tile});
+        if(findKong(hand,tile).length>0) actions.push({type:'kong',position:pos,options:findKong(hand,tile)});
+        // BUG FIX 2b: findPong now returns boolean, so check as > 0 (true) not >= 0
+        if(findPong(hand,tile)) actions.push({type:'pong',position:pos});
+        if(nextPlayer(fromPos)===pos){ const c=findChi(hand,tile); if(c.length>0)actions.push({type:'chi',position:pos,options:c}); }
+    }
+    return actions;
+}
+
+async function handleOtherPlayerActions() {
+    if(!gameState.lastDiscard) { nextTurn(); return; }
+    const actions = checkActions(gameState.lastDiscard.position);
+
+    // If South can act, show buttons and wait for player input
+    const southAction = actions.find(a=>a.position==='South');
+    if(southAction) {
+        const types = [];
+        for(const a of actions) {
+            if(a.position==='South') types.push(a.type);
+        }
+        types.push('pass');
+        showActionButtons('South', types);
+        return; // Wait for player to click a button
+    }
+
+    // For other players, auto-play first available action
+    for(const at of ['hu','kong','pong','chi']){
+        const ofType = actions.filter(a=>a.type===at);
+        if(!ofType.length) continue;
+        const chosen = ofType[0];
+        updateActionInfo(`${POSITION_NAMES[chosen.position]} ${at.toUpperCase()}`);
+        await sleep(1200);
+        if(at==='hu') { handleWin(chosen); return; }
+        if(at==='kong') { handleKong(chosen); return; }
+        if(at==='pong') { handlePong(chosen); return; }
+        if(at==='chi') { handleChi(chosen); return; }
+    }
+    nextTurn();
+}
+
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+function handleWin(w) {
+    // w.hand is the hand BEFORE adding the winning tile
+    // w.tile is the winning tile; w.selfDraw indicates self-draw (自摸)
+    const winnerPos = w.position;
+    const isSelfDraw = w.selfDraw || false;
+
+    // Add tile to hand for display
+    const fullHand = [...w.hand, w.tile];
+    gameState.players[winnerPos].hand = fullHand;
+
+    // Scoring: self-draw = 300 from each (900 total), discard win = 500 from discarder
+    if(isSelfDraw) {
+        const pay = 300;
+        for(const pos of POSITIONS) {
+            if(pos !== winnerPos) {
+                gameState.players[pos].score -= pay;
+                gameState.players[winnerPos].score += pay;
+            }
+        }
+        updateActionInfo(`${POSITION_NAMES[winnerPos]} 自摸！ +${pay*3}`);
+    } else {
+        const pay = 500;
+        const discarderPos = gameState.lastDiscard ? gameState.lastDiscard.position : null;
+        if(discarderPos) {
+            gameState.players[discarderPos].score -= pay;
+        }
+        gameState.players[winnerPos].score += pay;
+        updateActionInfo(`${POSITION_NAMES[winnerPos]} 胡！ +${pay}`);
+    }
+
+    updateDisplay();
+
+    // Check if any player is bankrupt
+    const bankrupt = POSITIONS.find(p => gameState.players[p].score <= 0);
+    if(bankrupt) {
+        setTimeout(()=>{
+            updateActionInfo(`${POSITION_NAMES[bankrupt]} 破產！遊戲結束`);
+            // Show game over overlay
+            showGameOver();
+        }, 2500);
+    } else {
+        setTimeout(()=>startNewRound(), 2500);
+    }
+}
+
+function showGameOver() {
+    const scores = POSITIONS.map(p => `${POSITION_NAMES[p]}: $${gameState.players[p].score}`).join(' | ');
+    const winner = POSITIONS.reduce((a,b) => gameState.players[a].score > gameState.players[b].score ? a : b);
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;color:#ffd700;font-size:24px;gap:16px;';
+    overlay.innerHTML = `
+        <div style="font-size:36px;font-weight:bold;">遊戲結束</div>
+        <div style="font-size:20px;">${POSITION_NAMES[winner]} 獲勝！</div>
+        <div style="font-size:14px;color:#aaa;">${scores}</div>
+        <button onclick="this.parentElement.remove();resetGame();" style="margin-top:20px;padding:12px 24px;font-size:16px;background:#27ae60;color:white;border:none;border-radius:6px;cursor:pointer;">再來一局</button>
+    `;
+    document.body.appendChild(overlay);
+}
+
+function resetGame() {
+    for(const pos of POSITIONS) {
+        gameState.players[pos].score = 2000;
+    }
+    gameState.roundNumber = 0;
+    startNewRound();
+}
+
+function handleKong(action) {
+    const pos = action.position;
+    const tile = action.options[0];
+    const hand = gameState.players[pos].hand;
+    for(let i=0;i<3;i++) {
+        const idx = hand.findIndex(t=>t.type===tile.type&&t.value===tile.value);
+        if(idx>=0) hand.splice(idx,1);
+    }
+    gameState.players[pos].melds.push({type:'kong',tiles:[tile,tile,tile,tile]});
+    if(pos === 'South') { sortHand(hand); gameState.drawnTileIndex = -1; }
+    if(!drawTile(pos)) {
+        endRound();
+        return;
+    }
+    gameState.currentTurn = pos;
+    updateDisplay();
+    if(pos==='South') {
+        startCountdown();
+    } else {
+        setTimeout(()=>handleAIDiscard(), 800);
+    }
+}
+
+function handlePong(action) {
+    const pos = action.position;
+    const tile = gameState.lastDiscard.tile;
+    const hand = gameState.players[pos].hand;
+    for(let i=0;i<2;i++) {
+        const idx = hand.findIndex(t=>t.type===tile.type&&t.value===tile.value);
+        if(idx>=0) hand.splice(idx,1);
+    }
+    gameState.players[pos].melds.push({type:'pong',tiles:[tile,tile,tile]});
+    if(pos === 'South') { sortHand(hand); gameState.drawnTileIndex = -1; }
+    gameState.lastDiscard = null;
+    gameState.currentTurn = pos;
+    updateDisplay();
+    if(pos==='South') {
+        startCountdown();
+    } else {
+        setTimeout(()=>handleAIDiscard(), 800);
+    }
+}
+
+function handleChi(action) {
+    const pos = action.position;
+    const chi = action.options[0];
+    const hand = gameState.players[pos].hand;
+    const discardTile = gameState.lastDiscard.tile;
+
+    // Remove from hand the 2 tiles that are NOT the discarded tile
+    let skippedDiscard = false;
+    for(const t of chi.tiles) {
+        if(!skippedDiscard && t.type === discardTile.type && String(t.value) === String(discardTile.value)) {
+            skippedDiscard = true;
+            continue;
+        }
+        const idx = hand.findIndex(x => x.type === t.type && String(x.value) === String(t.value));
+        if(idx >= 0) hand.splice(idx, 1);
+    }
+    gameState.players[pos].melds.push({type:'chi', tiles:[...chi.tiles]});
+    if(pos === 'South') { sortHand(hand); gameState.drawnTileIndex = -1; }
+    gameState.lastDiscard = null;
+    gameState.currentTurn = pos;
+    updateDisplay();
+    if(pos === 'South') {
+        startCountdown();
+    } else {
+        setTimeout(() => handleAIDiscard(), 800);
+    }
+}
+
+// ========================================
+// ACTION BUTTONS
+// ========================================
+function showActionButtons(pos, types) {
+    if(pos!=='South') return;
+    const container = document.getElementById('actionButtons');
+    container.innerHTML = '';
+    for(const type of types) {
+        const btn = document.createElement('button');
+        btn.className = `action-btn ${type}`;
+        btn.textContent = {hu:'胡',hu_self:'自摸',kong:'槓',pong:'碰',chi:'吃',pass:'放',pass_self:'不胡'}[type]||type;
+        btn.onclick = ()=>handleActionButton(type);
+        container.appendChild(btn);
+    }
+}
+
+function handleActionButton(type) {
+    clearCountdown();
+    document.getElementById('actionButtons').innerHTML = '';
+
+    // Self-draw win
+    if(type==='hu_self') {
+        const hand = gameState.players['South'].hand;
+        handleWin({
+            position: 'South',
+            hand: hand.slice(0, -1),
+            tile: hand[hand.length - 1],
+            selfDraw: true
+        });
+        return;
+    }
+    if(type==='pass_self') {
+        // Player chose not to self-draw, continue normal play
+        startCountdown();
+        return;
+    }
+
+    if(type==='pass') {
+        // When South passes, check if AI players can still act on the discard
+        if(gameState.lastDiscard) {
+            const actions = checkActions(gameState.lastDiscard.position);
+            const aiActions = actions.filter(a => a.position !== 'South');
+            for(const at of ['hu','kong','pong','chi']) {
+                const ofType = aiActions.filter(a => a.type === at);
+                if(ofType.length > 0) {
+                    const chosen = ofType[0];
+                    updateActionInfo(`${POSITION_NAMES[chosen.position]} ${at.toUpperCase()}`);
+                    setTimeout(() => {
+                        if(at==='hu') handleWin(chosen);
+                        else if(at==='kong') handleKong(chosen);
+                        else if(at==='pong') handlePong(chosen);
+                        else if(at==='chi') handleChi(chosen);
+                    }, 800);
+                    return;
+                }
+            }
+        }
+        gameState.lastDiscard = null;
+        nextTurn();
+        return;
+    }
+
+    if(!gameState.lastDiscard) return;
+    const actions = checkActions(gameState.lastDiscard.position);
+    const chosen = actions.find(a=>a.type===type&&a.position==='South');
+    if(!chosen) return;
+    if(type==='hu') { handleWin({...chosen, selfDraw: false}); return; }
+    if(type==='kong') { handleKong(chosen); return; }
+    if(type==='pong') { handlePong(chosen); return; }
+    if(type==='chi') {
+        // Check if multiple chi options exist — let player choose
+        const allChiActions = actions.filter(a => a.type === 'chi' && a.position === 'South');
+        if(allChiActions.length > 0) {
+            const allOptions = allChiActions.flatMap(a => a.options);
+            if(allOptions.length > 1) {
+                showChiChoices(allOptions);
+                return;
+            }
+        }
+        handleChi(chosen);
+        return;
+    }
+}
+
+function showChiChoices(options) {
+    const container = document.getElementById('actionButtons');
+    container.innerHTML = '';
+    for(let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        const vals = opt.tiles.map(t => {
+            if(t.type === 'man') return CHINESE_NUM[parseInt(t.value)] + '萬';
+            if(t.type === 'pin') return t.value + '筒';
+            if(t.type === 'sou') return t.value + '條';
+            return t.value;
+        });
+        const btn = document.createElement('button');
+        btn.className = 'action-btn chi';
+        btn.textContent = `吃 ${vals.join('-')}`;
+        btn.style.fontSize = '11px';
+        btn.style.padding = '6px 8px';
+        btn.onclick = () => {
+            document.getElementById('actionButtons').innerHTML = '';
+            handleChi({position: 'South', options: [opt]});
+        };
+        container.appendChild(btn);
+    }
+    // Add cancel button
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'action-btn pass';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => {
+        document.getElementById('actionButtons').innerHTML = '';
+        showActionButtons('South', ['chi', 'pass']);
+    };
+    container.appendChild(cancelBtn);
+}
+
+// ========================================
+// GAME FLOW
+// ========================================
+function nextTurn() {
+    // Standard Taiwan mahjong: East→South→West→North
+    const o = ['East','South','West','North'];
+    gameState.currentTurn = o[(o.indexOf(gameState.currentTurn)+1)%4];
+    if(!drawTile(gameState.currentTurn)) {
+        endRound();
+        return;
+    }
+    updateDisplay();
+    document.getElementById('actionButtons').innerHTML = '';
+
+    const pos = gameState.currentTurn;
+    const hand = gameState.players[pos].hand;
+
+    // Check self-draw win (自摸)
+    if(testWin(hand)) {
+        if(pos === 'South') {
+            // Show 胡 button for player
+            showActionButtons('South', ['hu_self', 'pass_self']);
+            startCountdown();
+            return;
+        } else {
+            // AI auto-wins on self-draw
+            handleWin({
+                position: pos,
+                hand: hand.slice(0, -1),
+                tile: hand[hand.length - 1],
+                selfDraw: true
+            });
+            return;
+        }
+    }
+
+    if(pos !== 'South') {
+        setTimeout(()=>handleAIDiscard(), 800);
+    } else {
+        startCountdown();
+    }
+}
+
+function handleAIDiscard() {
+    const pos = gameState.currentTurn;
+    const hand = gameState.players[pos].hand;
+    // DEFENSIVE: Ensure hand has odd number of tiles (3k+2)
+    if(hand.length%3!==2) {
+        console.warn(`Hand for ${pos} has invalid length ${hand.length}`);
+        nextTurn();
+        return;
+    }
+    const idx = Math.floor(Math.random()*hand.length);
+    const tile = hand.splice(idx,1)[0];
+    gameState.players[pos].discards.push(tile);
+    gameState.allDiscards.push({tile, player:pos, order: gameState.allDiscards.length});
+    gameState.lastDiscard = {position:pos,tile};
+    updateDisplay();
+    handleOtherPlayerActions();
+}
+
+function endRound(w) {
+    if(w) handleWin(w);
+    else { updateActionInfo('流局 — 無人胡牌'); setTimeout(()=>startNewRound(),2500); }
+}
+
+function startNewRound() {
+    clearCountdown();
+    gameState.roundNumber++;
+    gameState.wall = [];
+    gameState.currentTurn = 'East';
+    gameState.discardCount = 0;
+    gameState.selectedTile = null;
+    gameState.lastDiscard = null;
+    gameState.allDiscards = [];
+    for(const pos of POSITIONS) {
+        gameState.players[pos].hand = [];
+        gameState.players[pos].melds = [];
+        gameState.players[pos].discards = [];
+    }
+    createWall();
+    dealTiles();
+    updateDisplay();
+    setTimeout(()=>handleAIDiscard(),500);
+}
+
+function initializeGame() {
+    createWall();
+    dealTiles();
+    updateDisplay();
+    setTimeout(()=>handleAIDiscard(),500);
+}
+
+function getTileDisplay(t) {
+    if(t.type==='man') return t.value+'萬';
+    if(t.type==='pin') return t.value+'筒';
+    if(t.type==='sou') return t.value+'條';
+    return t.value;
+}
+
+// START
+initializeGame();
+</script>
+</body>
+</html>
