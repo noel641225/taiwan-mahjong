@@ -1,9 +1,5 @@
 {
   "build": {
-    "type": "dockerfile",
-    "dockerfile": "Dockerfile"
-  },
-  "start": {
-    "port": 8080
+    "type": "static"
   }
 }
